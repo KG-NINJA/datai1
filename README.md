@@ -41,5 +41,5 @@ This system is a precursor to a **city‑as‑a‑robot** design:
 4. Action  
 5. Feedback  
 
-## dataai1 は始まりにすぎない
+## datai1 は始まりにすぎない
 dataai1 provides the first stable signal vocabulary and sensory abstraction.
