@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sekai OCR Vision Panel</title>
+<style>
+  :root {
+    color-scheme: dark;
+  }
+  html, body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 20%, #020d1f 0%, #010409 60%, #000 100%);
+    font-family: "Helvetica Neue", system-ui, -apple-system, BlinkMacSystemFont, "Yu Gothic", sans-serif;
+    color: #d7ecff;
+  }
+  main {
+    padding: clamp(16px, 4vw, 48px);
+    max-width: 960px;
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: clamp(28px, 5vw, 48px);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7fd3ff;
+  }
+  p, li {
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  ul {
+    padding-left: 20px;
+  }
+  #statusLog {
+    margin-top: 24px;
+    padding: 16px;
+    border: 1px solid rgba(127, 211, 255, 0.4);
+    border-radius: 10px;
+    background: rgba(0, 20, 46, 0.6);
+    font-family: "Roboto Mono", "SFMono-Regular", monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 90px;
+    white-space: pre-line;
+  }
+  #metricTable {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    font-family: "Roboto Mono", "SFMono-Regular", monospace;
+    font-size: 13px;
+  }
+  .metric-card {
+    padding: 12px;
+    border: 1px solid rgba(127, 211, 255, 0.35);
+    border-radius: 10px;
+    background: rgba(0, 16, 32, 0.55);
+  }
+  .metric-card h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: #9bd9ff;
+    text-transform: uppercase;
+  }
+  .panel-area {
+    margin-top: 16px;
+    margin-bottom: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: center;
+  }
+  canvas#aiPanel {
+    width: 150px;
+    height: 100px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 6px;
+    background: #000;
+  }
+  .panel-caption {
+    flex: 1 1 220px;
+    font-family: "Roboto Mono", "SFMono-Regular", "Menlo", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 12px 14px;
+    border: 1px dashed rgba(127, 211, 255, 0.5);
+    border-radius: 8px;
+    background: rgba(0, 12, 24, 0.55);
+  }
+  video, canvas#processingCanvas {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<main>
+  <section class="panel-area">
+    <canvas id="aiPanel" width="150" height="100" aria-hidden="true"></canvas>
+    <div class="panel-caption">
+      VISION AI KEY<br>
+      H = Ambient light percentage<br>
+      E = Resolution + motion delta<br>
+      S = Stream status (REQ/CAP/ERR)<br>
+      EV = Event code (10=nominal, 55=high contrast, 60=motion, 90=error)
+    </div>
+  </section>
+  <h1>Vision AI Telemetry</h1>
+  <p>ウェブカメラ映像を画面に表示せず、Vision-AIが読める高コントラストのAIステータスパネルにリアルタイムで要約します。H/E/S/EVはローンチシーケンスと同じフォーマットを踏襲し、300ms間隔で更新します。</p>
+  <ul>
+    <li>H: Ambient Light（0-100%）。フレームの平均輝度から算出。</li>
+    <li>E: Resolution / Motion。使用中のストリーム解像度と明るさ変化量（簡易モーションスコア）。</li>
+    <li>S: Stream Status。`REQ`（権限待ち）→`CAP`（取得中）→`ERR`の順で遷移。</li>
+    <li>EV: Event Code。20=待機、40=暗部、60=高モーション、90=エラーなど。</li>
+  </ul>
+  <p>許可ダイアログが表示されたら「許可」を押してください。映像はDOMに描画されず、data解析のみを行います。</p>
+  <section id="statusLog" aria-live="polite">[boot] ウェブカメラ許可を待っています…</section>
+  <section id="metricTable">
+    <div class="metric-card">
+      <h3>Ambient Window</h3>
+      <div id="metricLight">Light: -- % (min -- / max --)</div>
+    </div>
+    <div class="metric-card">
+      <h3>Contrast / Motion</h3>
+      <div id="metricContrast">Contrast: -- (σ)</div>
+      <div id="metricMotion">Motion: ---</div>
+    </div>
+    <div class="metric-card">
+      <h3>Color Bias</h3>
+      <div id="metricColor">R: --  G: --  B: --</div>
+      <div id="metricHue">Tilt: --</div>
+    </div>
+  </section>
+</main>
+<video id="webcamFeed" playsinline muted></video>
+<canvas id="processingCanvas" width="160" height="120"></canvas>
+<script>
+(() => {
+  "use strict";
+  const aiPanelCanvas = document.getElementById("aiPanel");
+  const aiPanelCtx = aiPanelCanvas.getContext("2d", { alpha: false });
+  aiPanelCtx.imageSmoothingEnabled = false;
+  const webcamVideo = document.getElementById("webcamFeed");
+  const processingCanvas = document.getElementById("processingCanvas");
+  const processingCtx = processingCanvas.getContext("2d", { willReadFrequently: true });
+  const statusLog = document.getElementById("statusLog");
+  const metricLight = document.getElementById("metricLight");
+  const metricContrast = document.getElementById("metricContrast");
+  const metricMotion = document.getElementById("metricMotion");
+  const metricColor = document.getElementById("metricColor");
+  const metricHue = document.getElementById("metricHue");
+  let renderTimer = null;
+  let sampleTimer = null;
+  const panelState = {
+    lightPercent: 0,
+    motionScore: 0,
+    lastBrightness: null,
+    resolution: "0x0",
+    stage: "REQ",
+    eventCode: 20,
+    errors: [],
+    lightMin: 0,
+    lightMax: 0,
+    contrast: 0,
+    averageR: 0,
+    averageG: 0,
+    averageB: 0,
+    colorTilt: "--",
+  };
+
+  function log(line) {
+    const now = new Date();
+    const stamp = now.toLocaleTimeString("ja-JP", { hour12: false });
+    const lines = statusLog.textContent.split("\n").filter(Boolean);
+    lines.push(`[${stamp}] ${line}`);
+    while (lines.length > 6) lines.shift();
+    statusLog.textContent = lines.join("\n");
+  }
+
+  function requestCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      panelState.stage = "ERR";
+      panelState.eventCode = 99;
+      log("getUserMedia非対応のため停止しました");
+      renderAIPanel();
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      .then(handleStream)
+      .catch(handleCameraError);
+  }
+
+  function handleStream(stream) {
+    panelState.stage = "CAP";
+    const trackSettings = stream.getVideoTracks()[0]?.getSettings?.() || {};
+    if (trackSettings.width && trackSettings.height) {
+      panelState.resolution = `${trackSettings.width}x${trackSettings.height}`;
+    }
+    webcamVideo.srcObject = stream;
+    webcamVideo.play().catch(() => {});
+    log(`ストリーム開始 ${panelState.resolution}`);
+    startSampling();
+  }
+
+  function handleCameraError(err) {
+    panelState.stage = "ERR";
+    panelState.eventCode = 99;
+    const message = err && err.message ? err.message : "camera error";
+    panelState.errors.push(message);
+    log(`エラー: ${message}`);
+    renderAIPanel();
+  }
+
+  function startSampling() {
+    if (sampleTimer) return;
+    sampleTimer = setInterval(sampleFrame, 300);
+  }
+
+  function sampleFrame() {
+    if (webcamVideo.readyState < 2) return;
+    const { videoWidth, videoHeight } = webcamVideo;
+    if (!videoWidth || !videoHeight) return;
+    if (panelState.resolution === "0x0") {
+      panelState.resolution = `${videoWidth}x${videoHeight}`;
+    }
+    processingCanvas.width = 160;
+    processingCanvas.height = 120;
+    processingCtx.drawImage(webcamVideo, 0, 0, processingCanvas.width, processingCanvas.height);
+    const { data } = processingCtx.getImageData(0, 0, processingCanvas.width, processingCanvas.height);
+    const pixelCount = data.length / 4;
+    let sum = 0;
+    let sumSq = 0;
+    let minLight = 255;
+    let maxLight = 0;
+    let sumR = 0;
+    let sumG = 0;
+    let sumB = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const brightness = (r + g + b) / 3;
+      sum += brightness;
+      sumSq += brightness * brightness;
+      if (brightness < minLight) minLight = brightness;
+      if (brightness > maxLight) maxLight = brightness;
+      sumR += r;
+      sumG += g;
+      sumB += b;
+    }
+    const avg = sum / pixelCount;
+    const variance = Math.max(0, sumSq / pixelCount - avg * avg);
+    const contrast = Math.sqrt(variance);
+    const lightPercent = Math.round((avg / 255) * 100);
+    const prev = panelState.lastBrightness ?? avg;
+    const motionScore = Math.min(999, Math.round(Math.abs(avg - prev)));
+    panelState.lastBrightness = avg;
+    panelState.lightPercent = lightPercent;
+    panelState.motionScore = motionScore;
+    panelState.lightMin = Math.round((minLight / 255) * 100);
+    panelState.lightMax = Math.round((maxLight / 255) * 100);
+    panelState.contrast = Math.round(contrast * 10) / 10;
+    panelState.averageR = Math.round(sumR / pixelCount);
+    panelState.averageG = Math.round(sumG / pixelCount);
+    panelState.averageB = Math.round(sumB / pixelCount);
+    panelState.colorTilt = deriveColorTilt(panelState.averageR, panelState.averageG, panelState.averageB);
+    panelState.eventCode = determineEventCode(lightPercent, motionScore, contrast);
+    updateMetricCards();
+  }
+
+  function deriveColorTilt(r, g, b) {
+    const maxChannel = Math.max(r, g, b);
+    const minChannel = Math.min(r, g, b);
+    if (maxChannel - minChannel < 8) return "Neutral";
+    if (maxChannel === r) return "Warm";
+    if (maxChannel === g) return "Green";
+    return "Cool";
+  }
+
+  function determineEventCode(light, motion, contrast) {
+    if (panelState.stage !== "CAP") return panelState.eventCode;
+    if (motion > 60) return 60;
+    if (contrast > 70) return 55;
+    if (light < 20) return 40;
+    if (light > 80) return 30;
+    return 10;
+  }
+
+  function updateMetricCards() {
+    metricLight.textContent = `Light: ${panelState.lightPercent}% (min ${panelState.lightMin}% / max ${panelState.lightMax}%)`;
+    metricContrast.textContent = `Contrast: ${panelState.contrast} (σ)`;
+    metricMotion.textContent = `Motion: ${panelState.motionScore}`;
+    metricColor.textContent = `R: ${panelState.averageR}  G: ${panelState.averageG}  B: ${panelState.averageB}`;
+    metricHue.textContent = `Tilt: ${panelState.colorTilt}`;
+  }
+
+  function renderAIPanel() {
+    const hpValue = panelState.stage === "CAP" ? panelState.lightPercent : 0;
+    const state = {
+      hp: hpValue.toString().padStart(3, "0"),
+      enemyId: (panelState.resolution || "0x0").slice(0, 6),
+      enemyDist: panelState.motionScore.toString().padStart(3, "0"),
+      stage: panelState.stage.padEnd(3, " ").slice(0, 3),
+      event: panelState.eventCode,
+    };
+    aiPanelCtx.save();
+    aiPanelCtx.fillStyle = "#000";
+    aiPanelCtx.fillRect(0, 0, aiPanelCanvas.width, aiPanelCanvas.height);
+    aiPanelCtx.fillStyle = "#fff";
+    aiPanelCtx.font = "12px \"Roboto Mono\", \"SFMono-Regular\", \"Menlo\", monospace";
+    aiPanelCtx.textBaseline = "top";
+    aiPanelCtx.textAlign = "left";
+    const lines = [
+      `H${state.hp}`,
+      `E${state.enemyId}/${state.enemyDist}`,
+      `S${state.stage}`,
+      `EV${state.event}`,
+    ];
+    for (let i = 0; i < lines.length; i++) {
+      aiPanelCtx.fillText(lines[i], 8, 8 + i * 20);
+    }
+    aiPanelCtx.restore();
+  }
+
+  function initPanelLoop() {
+    if (renderTimer) return;
+    renderTimer = setInterval(renderAIPanel, 300);
+  }
+
+  requestCamera();
+  initPanelLoop();
+  log("AIパネル初期化、H/E/S/EV指標を待機中");
+})();
+</script>
+</body>
+</html>
