@@ -93,12 +93,18 @@
     border-radius: 8px;
     background: rgba(0, 12, 24, 0.55);
   }
-  video, canvas#processingCanvas {
+  .capture-sink {
     position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
+    width: 0;
+    height: 0;
+    overflow: hidden;
     pointer-events: none;
+  }
+  .capture-sink > * {
+    display: block;
+    width: 0;
+    height: 0;
+    opacity: 0;
   }
 </style>
 </head>
@@ -113,6 +119,7 @@
       S = Stream status (REQ/CAP/ERR)<br>
       EV = Event code (10=nominal, 55=high contrast, 60=motion, 90=error)
     </div>
+    <button id="tweetBtn" type="button">Tweet #KGNINJA</button>
   </section>
   <h1>Vision AI Telemetry</h1>
   <p>ウェブカメラ映像を画面に表示せず、Vision-AIが読める高コントラストのAIステータスパネルにリアルタイムで要約します。H/E/S/EVはローンチシーケンスと同じフォーマットを踏襲し、300ms間隔で更新します。</p>
@@ -141,8 +148,10 @@
     </div>
   </section>
 </main>
-<video id="webcamFeed" playsinline muted></video>
-<canvas id="processingCanvas" width="160" height="120"></canvas>
+<div class="capture-sink" aria-hidden="true">
+  <video id="webcamFeed" playsinline muted></video>
+  <canvas id="processingCanvas" width="160" height="120"></canvas>
+</div>
 <script>
 (() => {
   "use strict";
@@ -158,6 +167,7 @@
   const metricMotion = document.getElementById("metricMotion");
   const metricColor = document.getElementById("metricColor");
   const metricHue = document.getElementById("metricHue");
+  const tweetBtn = document.getElementById("tweetBtn");
   let renderTimer = null;
   let sampleTimer = null;
   const panelState = {
@@ -338,8 +348,36 @@
 
   requestCamera();
   initPanelLoop();
+  tweetBtn?.addEventListener("click", () => {
+    const intent = new URL("https://twitter.com/intent/tweet");
+    const text = "A dashboard shown when conveying visual information to AI. #KGNINJA #datai1";
+    intent.searchParams.set("text", text);
+    intent.searchParams.set("url", "https://kg-ninja.github.io/datai1/");
+    window.open(intent.toString(), "_blank", "noopener");
+  });
   log("AIパネル初期化、H/E/S/EV指標を待機中");
 })();
 </script>
 </body>
 </html>
+  #tweetBtn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(127, 211, 255, 0.7);
+    background: linear-gradient(135deg, #0058ff, #0ac8ff);
+    color: #f8fbff;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 120, 255, 0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  #tweetBtn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(0, 120, 255, 0.4);
+  }
