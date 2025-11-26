@@ -32,3 +32,8 @@ This project mirrors the AI status overlay used in our shooter prototypes, but t
 - The status panel shares its format with other Vision-AI “watcher” modules, so OCR scripts can be reused without changes.
 
 Feel free to extend `sampleFrame()` with additional heuristics (edge density, face count, etc.) as long as the panel stays minimal and deterministic.
+
+## License & Rights
+- **Code**: Released under the MIT License. You may use, modify, and distribute the source with attribution. See `LICENSE` (create if needed) or copy the standard MIT text alongside this project.
+- **Captured data**: Webcam frames stay local. If you persist derived metrics or raw footage, ensure you have the consent of anyone in view and comply with privacy laws applicable in your jurisdiction.
+- **Third-party assets**: This repository currently has no third-party dependencies. If you add libraries, document their licenses in this section.
