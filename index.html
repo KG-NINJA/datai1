@@ -93,6 +93,27 @@
     border-radius: 8px;
     background: rgba(0, 12, 24, 0.55);
   }
+  #tweetBtn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(127, 211, 255, 0.7);
+    background: linear-gradient(135deg, #0058ff, #0ac8ff);
+    color: #f8fbff;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 120, 255, 0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  #tweetBtn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(0, 120, 255, 0.4);
+  }
   .capture-sink {
     position: absolute;
     width: 0;
@@ -360,24 +381,3 @@
 </script>
 </body>
 </html>
-  #tweetBtn {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 18px;
-    border-radius: 999px;
-    border: 1px solid rgba(127, 211, 255, 0.7);
-    background: linear-gradient(135deg, #0058ff, #0ac8ff);
-    color: #f8fbff;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0, 120, 255, 0.25);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-  }
-  #tweetBtn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 10px 20px rgba(0, 120, 255, 0.4);
-  }
